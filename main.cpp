@@ -42,10 +42,10 @@
 #define IR_DOOR_PIN 17 
 #define IR_OBSTACLE_PIN 27
 
-#define BUTTON_PIN_F1 22
-#define BUTTON_PIN_F2 10
-#define BUTTON_PIN_F3 9
-#define BUTTON_PIN_F4 11
+#define BUTTON_PIN_F1 11
+#define BUTTON_PIN_F2 9
+#define BUTTON_PIN_F3 10
+#define BUTTON_PIN_F4 22
 
 int _running = 1;  // Global variable to control service execution
 
@@ -101,6 +101,37 @@ void GPIO_Toggle_IP(){
     }
 }
 
+void GPIO_CHECKS(){
+    static int init = 0;
+    std::cout << "\n\tGPIO_CHECKS" << std::endl;
+    if(!init){
+        GPIO_Init(IR_DOOR_PIN, GPIO_IN);
+        GPIO_Init(IR_OBSTACLE_PIN, GPIO_IN);
+        GPIO_Init(BUTTON_PIN_F1, GPIO_IN);
+        GPIO_Init(BUTTON_PIN_F2, GPIO_IN);
+        GPIO_Init(BUTTON_PIN_F3, GPIO_IN);
+        GPIO_Init(BUTTON_PIN_F4, GPIO_IN);
+
+        init = 1;
+    }
+
+    int gpio_value = 0;
+
+    GPIO_Get_Value(IR_DOOR_PIN, &gpio_value);
+    std::cout << "IR_DOOR_PIN value: " << gpio_value << std::endl;
+    GPIO_Get_Value(IR_OBSTACLE_PIN, &gpio_value);
+    std::cout << "IR_OBSTACLE_PIN value: " << gpio_value << std::endl;
+
+    GPIO_Get_Value(BUTTON_PIN_F1, &gpio_value);
+    std::cout << "BUTTON_PIN_F1 value: " << gpio_value << std::endl;
+    GPIO_Get_Value(BUTTON_PIN_F2, &gpio_value);
+    std::cout << "BUTTON_PIN_F2 value: " << gpio_value << std::endl;
+    GPIO_Get_Value(BUTTON_PIN_F3, &gpio_value);
+    std::cout << "BUTTON_PIN_F3 value: " << gpio_value << std::endl;
+    GPIO_Get_Value(BUTTON_PIN_F4, &gpio_value);
+    std::cout << "BUTTON_PIN_F4 value: " << gpio_value << std::endl;
+}
+
 // System macro definitions
 // Service 1
 #define ELEVATOR_DOOR_OPEN_TIME 60 // ticks: 1tick = 50ms => 3seconds (for S1)
@@ -117,6 +148,8 @@ void GPIO_Toggle_IP(){
 #define ELEVATOR_DOOR_CLOSING 2
 #define ELEVATOR_DOOR_OPENING 3
 
+#define IR_DETECTED 0
+#define IR_NOT_DETECTED 1
 
 // Global shared variables
 struct Elevator {
@@ -148,7 +181,8 @@ void Service_1(){
 
     elevator_cpy = elevator; // Copy the shared elevator structure
 
-    /* if((elevator_cpy.door_status == ELEVATOR_DOOR_CLOSE) && (elevator_cpy.door_open_flag == 1)) {
+    /* 
+    if((elevator_cpy.door_status == ELEVATOR_DOOR_CLOSE) && (elevator_cpy.door_open_flag == 1)) {
         // Open the door
         syslog(LOG_CRIT, "Service 1: Door is opening\n");
         elevator_cpy.door_status = ELEVATOR_DOOR_OPENING;
@@ -200,7 +234,8 @@ void Service_1(){
 
             elevator = elevator_cpy; // Update the shared elevator structure
         }
-    } */
+    } 
+    */
 
     switch (elevator_cpy.door_status) {
         case ELEVATOR_DOOR_CLOSE:
@@ -216,7 +251,7 @@ void Service_1(){
             if (elevator_cpy.door_open_flag == 1) {
                 int temp = 0;
                 GPIO_Get_Value(IR_DOOR_PIN, &temp);
-                if (temp == 0) {
+                if (temp == IR_DETECTED) {
                     // Door is opened
                     syslog(LOG_CRIT, "Service 1: Door is opened\n");
                     elevator_cpy.door_status = ELEVATOR_DOOR_OPEN;
@@ -239,7 +274,7 @@ void Service_1(){
                 // Check for obstacle
                 int obstacle_value = 0;
                 GPIO_Get_Value(IR_OBSTACLE_PIN, &obstacle_value);
-                if (obstacle_value == 1) {
+                if (obstacle_value == IR_DETECTED1) {
                     // Obstacle detected
                     syslog(LOG_CRIT, "Service 1: Obstacle detected. Door will remain open\n");
                     tick_count = ELEVATOR_DOOR_OBSTACLE_TIME; // Set the timer for door open time
@@ -252,7 +287,7 @@ void Service_1(){
             if (tick_count <= 0) {
                 int temp = 0;
                 GPIO_Get_Value(IR_DOOR_PIN, &temp);
-                if (temp == 1) {
+                if (temp == IR_DETECTED) {
                     // Door is closed
                     syslog(LOG_CRIT, "Service 1: Door is closed\n");
                     elevator_cpy.door_status = ELEVATOR_DOOR_CLOSE;
@@ -260,7 +295,7 @@ void Service_1(){
                 }
 
                 GPIO_Get_Value(IR_OBSTACLE_PIN, &temp);
-                if(temp == 1) {
+                if(temp == IR_DETECTED) {
                     // Obstacle detected
                     syslog(LOG_CRIT, "Service 1: Obstacle detected. Door will open again\n");
                     elevator_cpy.door_status = ELEVATOR_DOOR_OPEN;
@@ -309,7 +344,7 @@ int main(int argc, char* argv[]) {
             ++i; // Skip the value
         }
     }
-
+    std::cout << "Flag value: " << flag_value << std::endl;
     // Add services based on the flag value
     switch(flag_value) {
         case 0: // Elevator services
@@ -320,6 +355,9 @@ int main(int argc, char* argv[]) {
             break;
         case 2:
             sequencer.addService(&GPIO_Toggle_IP, 1, 98, 100);
+            break;
+        case 3:
+            sequencer.addService(&GPIO_CHECKS, 1, 98, 100);
             break;
         default:
             std::cerr << "Invalid flag value. Use -f <flag_value=1-6>" << std::endl;
