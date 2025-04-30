@@ -318,6 +318,39 @@ void Service_1(){
     }
 }
 
+int get_push_button_floor() {
+    int floor = 0;
+    int button_value = 0;
+    GPIO_Get_Value(BUTTON_PIN_F1, &button_value);
+    if (button_value == 1) {
+        floor = 1;
+    } 
+    else {
+        GPIO_Get_Value(BUTTON_PIN_F2, &button_value);
+        if (button_value == 1) {
+            floor = 2;
+        } 
+        else {
+            GPIO_Get_Value(BUTTON_PIN_F3, &button_value);
+            if (button_value == 1) {
+                floor = 3;
+            } 
+            else {
+                GPIO_Get_Value(BUTTON_PIN_F4, &button_value);
+                if (button_value == 1) {
+                    floor = 4;
+                }
+            }
+        }
+    }
+    return floor;
+}
+
+int get_keypad_button_floor(){
+
+    return -1;
+}
+
 /* 
  * Control the elevator movement
  * This service runs at 100ms intervals 
@@ -336,64 +369,68 @@ void Service_2(){
         //keypad init
         init = 1;
     }
-//mutex lock
+// mutex lock
     elevator_cpy2 = elevator; // Copy the shared elevator structure
-//mutex unlock 
-if(elevator_cpy2.door_status == ELEVATOR_DOOR_CLOSE) //If the door is closed, floor can be selected
-{
-switch (elevator_cpy2.floor_status) {
-    case ELEVATOR_FLOOR_SELECTED:
-        //Detect if keypad button is pressed if the elevator is at the destination floor
-        if((elevator_button_detected) && (elevator_cpy2.curr_floor == elevator_cpy2.dest_floor))
-        {
-            elevator_cpy2.dest_floor = push button_pressed_macro_floorno;
-        }
+// mutex unlock 
 
-        //Detect if push button is pressed if the elevator is at the destination floor
-        else if((push_button_detected) && (elevator_cpy2.curr_floor == elevator_cpy2.dest_floor))
-        {
-            elevator_cpy2.dest_floor = elevator button_pressed_macro_floorno;
-        }
+// If the door is closed, floor can be selected
+    if(elevator_cpy2.door_status == ELEVATOR_DOOR_CLOSE) {
+        switch (elevator_cpy2.floor_status) {
+            case ELEVATOR_FLOOR_SELECTED:
+                //Detect if keypad button is pressed if the elevator is at the destination floor
+                int elevator_button_detected = get_keypad_button_floor();
+                int push_button_detected = get_push_button_floor();
+                if((elevator_button_detected) && (elevator_cpy2.curr_floor == elevator_cpy2.dest_floor)){
+                    elevator_cpy2.dest_floor = elevator_button_detected;
+                }
+                //Detect if push button is pressed if the elevator is at the destination floor
+                else if((push_button_detected) && (elevator_cpy2.curr_floor == elevator_cpy2.dest_floor)){
+                    elevator_cpy2.dest_floor = push_button_detected;
+                }
 
-        //If user selects same floor, break out
-        if(elevator_cpy2.curr_floor == elevator_cpy2.dest_floor)
-            break;
-        elevator_cpy2.floor_status = ELEVATOR_MOVE;
-        //mutex_lock
-        elevator = elevator_cpy; // Update the shared elevator structure
-        //mutex_unlock
-        tick_count = ELEVATOR_MOVE_TIME; // Set the timer for floor move time
-        break;
-
-    case ELEVATOR_MOVE:
-        if(--tick == 0)
-        {
-            // TODO: determine direction of movement and do ++ or --
-            elevator_cpy2.curr_floor = (elevator_cpy2.curr_floor > elevator_cpy2.dest_floor) ? elevator_cpy2.curr_floor - 1 : elevator_cpy2.curr_floor + 1;
+                //If user selects same floor, break out
+                if(elevator_cpy2.curr_floor == elevator_cpy2.dest_floor)
+                    break;
+                
+                elevator_cpy2.floor_status = ELEVATOR_MOVE;
+                
+                //mutex_lock
+                elevator = elevator_cpy; // Update the shared elevator structure
+                //mutex_unlock
             
-            if(elevator_cpy2.dest_floor != elevator_cpy2.curr_floor)
-            {
-                tick = ELEVATOR_MOVE_TIME; // reset the tick timer if the destination is not reached
-            }
-        }
-        elevator_cpy2.floor_status = ELEVATOR_FLOOR_SELECTED;
-        elevator_cpy2.door_open_flag = 1; //Floor is reached so door can open
-        //mutex lock
-        elevator = elevator_cpy; // Update the shared elevator structure
-        //mutex_unlock
-        break;
+                tick_count = ELEVATOR_MOVE_TIME; // Set the timer for floor move time
+                
+                break;
 
-    default:
-        // Handle unexpected door status
-        syslog(LOG_CRIT, "Service 2: Unexpected floor movement\n");
-        break;
+            case ELEVATOR_MOVE:
+                if(--tick == 0){
+                    // Determine direction of movement and do ++ or --
+                    elevator_cpy2.curr_floor = (elevator_cpy2.curr_floor > elevator_cpy2.dest_floor) ? elevator_cpy2.curr_floor - 1 : elevator_cpy2.curr_floor + 1;
+                    
+                    if(elevator_cpy2.dest_floor != elevator_cpy2.curr_floor){
+                        tick = ELEVATOR_MOVE_TIME; // reset the tick timer if the destination is not reached
+                    }
+                }
+
+                elevator_cpy2.floor_status = ELEVATOR_FLOOR_SELECTED;
+                elevator_cpy2.door_open_flag = 1; //Floor is reached so door can open
+                
+                //mutex lock
+                elevator = elevator_cpy; // Update the shared elevator structure
+                //mutex_unlock
+                
+                break;
+
+            default:
+                // Handle unexpected door status
+                syslog(LOG_CRIT, "Service 2: Unexpected floor movement\n");
+                break;
+        }
 }
-}
- else 
- {
-    syslog(LOG_INFO, "The door is open. Elevator cannot move\n");
-    break;
- }
+    // else {
+    //     syslog(LOG_INFO, "The door is open. Elevator cannot move\n");
+    //     break;
+    // }
 }
 
 // Control the OLED display and display the current floor, destination floor, and door status
@@ -413,13 +450,11 @@ void Service_3(){
     */
     
     SSD1106_gotoXY(11, 0);
-    if(door_status == ELEVATOR_DOOR_OPEN)
-    {
+    if(door_status == ELEVATOR_DOOR_OPEN){
         SSD1106_puts(fd, "Open", &Font_7x10, SSD1106_COLOR_WHITE);
     }
 
-    else
-    {
+    else{
         SSD1106_puts(fd, "Closed", &Font_7x10, SSD1106_COLOR_WHITE);
     }
 
@@ -433,8 +468,6 @@ void Service_3(){
     SSD1106_update_screen(fd);
 
     sleep(5);
-    
-
 }
 
 int main(int argc, char* argv[]) {
