@@ -1,6 +1,7 @@
 #include "i2c.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 int i2c_init(void) {
     int fd = open(I2C_DEVICE, O_RDWR);
@@ -33,11 +34,19 @@ void i2c_write_multi(int fd, uint8_t saddr, uint8_t maddr, uint8_t *buffer, uint
         return;
     }
     
-    uint8_t buf[length + 1];
+    // uint8_t buf[length + 1];
+    uint8_t *buf = (uint8_t *)malloc((length + 1) * sizeof(uint8_t));
+    if (buf == NULL) {
+        perror("Failed to allocate memory for I2C buffer");
+        return;
+    }
+
     buf[0] = maddr;
     memcpy(&buf[1], buffer, length);
     
     if (write(fd, buf, length + 1) != (length + 1)) {
         perror("Failed to write multiple bytes to I2C");
     }
+
+    free(buf);
 }

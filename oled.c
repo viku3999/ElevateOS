@@ -96,7 +96,7 @@ void SSD1106_gotoXY(uint16_t x, uint16_t y) {
     SSD1106.CurrentY = y;
 }
 
-char SSD1106_putc(int fd, char ch, FontDef *Font, SSD1106_COLOR_t color) {
+char SSD1106_putc(int fd, const char ch, FontDef *Font, SSD1106_COLOR_t color) {
     uint32_t i, b, j;
 
     if (SSD1106_WIDTH <= (SSD1106.CurrentX + Font->FontWidth) ||
@@ -119,7 +119,7 @@ char SSD1106_putc(int fd, char ch, FontDef *Font, SSD1106_COLOR_t color) {
     return ch;
 }
 
-char SSD1106_puts(int fd, char *str, FontDef *Font, SSD1106_COLOR_t color) {
+char SSD1106_puts(int fd, const char *str, FontDef *Font, SSD1106_COLOR_t color) {
     while (*str) {
         if (SSD1106_putc(fd, *str, Font, color) != *str) {
             return *str;

@@ -44,6 +44,8 @@
 #include "i2c.h"
 #include "oled.h"
 
+#include "keypad.h"
+
 // Pin definitions
 #define IR_DOOR_PIN 17 
 #define IR_OBSTACLE_PIN 27
@@ -142,13 +144,11 @@ void OLED_Check() {
     int fd = i2c_init();
     if (fd < 0) {
         fprintf(stderr, "Failed to initialize I2C\n");
-        return 1;
     }
 
     if (!SSD1106_init(fd)) {
         fprintf(stderr, "Failed to initialize OLED\n");
         i2c_close(fd);
-        return 1;
     }
 
     // Display test pattern
@@ -338,7 +338,7 @@ void Service_1(){
                 // Check for obstacle
                 int obstacle_value = 0;
                 GPIO_Get_Value(IR_OBSTACLE_PIN, &obstacle_value);
-                if (obstacle_value == IR_DETECTED1) {
+                if (obstacle_value == IR_DETECTED) {
                     // Obstacle detected
                     syslog(LOG_CRIT, "Service 1: Obstacle detected. Door will remain open\n");
                     tick_count = ELEVATOR_DOOR_OBSTACLE_TIME; // Set the timer for door open time
@@ -434,11 +434,13 @@ void Service_2(){
 
 // If the door is closed, floor can be selected
     if(elevator_cpy2.door_status == ELEVATOR_DOOR_CLOSE) {
+        int elevator_button_detected;
+        int push_button_detected;
         switch (elevator_cpy2.floor_status) {
             case ELEVATOR_FLOOR_SELECTED:
                 //Detect if keypad button is pressed if the elevator is at the destination floor
-                int elevator_button_detected = get_keypad_button_floor();
-                int push_button_detected = get_push_button_floor();
+                elevator_button_detected = get_keypad_button_floor();
+                push_button_detected = get_push_button_floor();
                 if((elevator_button_detected) && (elevator_cpy2.curr_floor == elevator_cpy2.dest_floor)){
                     elevator_cpy2.dest_floor = elevator_button_detected;
                 }
@@ -454,7 +456,7 @@ void Service_2(){
                 elevator_cpy2.floor_status = ELEVATOR_MOVE;
                 
                 //mutex_lock
-                elevator = elevator_cpy; // Update the shared elevator structure
+                elevator = elevator_cpy2; // Update the shared elevator structure
                 //mutex_unlock
             
                 tick_count = ELEVATOR_MOVE_TIME; // Set the timer for floor move time
@@ -462,12 +464,12 @@ void Service_2(){
                 break;
 
             case ELEVATOR_MOVE:
-                if(--tick == 0){
+                if(--tick_count == 0){
                     // Determine direction of movement and do ++ or --
                     elevator_cpy2.curr_floor = (elevator_cpy2.curr_floor > elevator_cpy2.dest_floor) ? elevator_cpy2.curr_floor - 1 : elevator_cpy2.curr_floor + 1;
                     
                     if(elevator_cpy2.dest_floor != elevator_cpy2.curr_floor){
-                        tick = ELEVATOR_MOVE_TIME; // reset the tick timer if the destination is not reached
+                        tick_count = ELEVATOR_MOVE_TIME; // reset the tick timer if the destination is not reached
                     }
                 }
 
@@ -475,7 +477,7 @@ void Service_2(){
                 elevator_cpy2.door_open_flag = 1; //Floor is reached so door can open
                 
                 //mutex lock
-                elevator = elevator_cpy; // Update the shared elevator structure
+                elevator = elevator_cpy2; // Update the shared elevator structure
                 //mutex_unlock
                 
                 break;
@@ -496,20 +498,16 @@ void Service_2(){
 // This service runs at 150ms intervals
 void Service_3(){
 
-    /* While initializing the OLED:
+    struct Elevator elevator_cpy3 = {0, 0, 0, 0, 0};
+    int fd = i2c_init();
 
-    SSD1106_gotoXY(0, 0);
-    SSD1106_puts(fd, "DOOR STATUS", &Font_7x10, SSD1106_COLOR_WHITE);
-    
-    SSD1106_gotoXY(0, 16);
-    SSD1106_puts(fd, "CURR FLOOR", &Font_7x10, SSD1106_COLOR_WHITE);
-    
-    SSD1106_gotoXY(0, 32);
-    SSD1106_puts(fd, "DEST FLOOR", &Font_7x10, SSD1106_COLOR_WHITE);
-    */
-    
+    // mutex lock
+    elevator_cpy3 = elevator; // Copy the shared elevator structure
+    // mutex unlock 
+
     SSD1106_gotoXY(11, 0);
-    if(door_status == ELEVATOR_DOOR_OPEN){
+
+    if(elevator_cpy3.door_status == ELEVATOR_DOOR_OPEN){
         SSD1106_puts(fd, "Open", &Font_7x10, SSD1106_COLOR_WHITE);
     }
 
@@ -517,11 +515,11 @@ void Service_3(){
         SSD1106_puts(fd, "Closed", &Font_7x10, SSD1106_COLOR_WHITE);
     }
 
-    uint8_t digit = elevator.curr_floor; //mutex lock?
+    uint8_t digit = elevator_cpy3.curr_floor; //mutex lock?
     SSD1106_gotoXY(11, 16);
     SSD1106_printDigit(fd, digit, &Font_7x10, SSD1106_COLOR_WHITE);
 
-    uint8_t digit1 = elevator.dest_floor; //mutex lock?
+    uint8_t digit1 = elevator_cpy3.dest_floor; //mutex lock?
     SSD1106_printDigit(fd, digit1, &Font_7x10, SSD1106_COLOR_WHITE);
     
     SSD1106_update_screen(fd);
