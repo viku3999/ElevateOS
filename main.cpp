@@ -179,14 +179,10 @@ void OLED_Check() {
 
 void Keypad_Test() {
     initialize_keypad();
-    printf("Press any key (exit with '#'):\n");
 
-    while (1) {
-        char key = detect_key_press();
-        if (key) {
-            printf("Pressed: %c\n", key);
-            if (key == '#') break;
-        }
+    char key = detect_key_press();
+    if (key) {
+        printf("Pressed: %c\n", key);
     }
 
     bcm2835_close();
@@ -547,7 +543,9 @@ int main(int argc, char* argv[]) {
     // Add services based on the flag value
     switch(flag_value) {
         case 0: // Elevator services
-            sequencer.addService(&GPIO_Toggle_IP, 1, 98, 100);
+            sequencer.addService(&Service_1, 1, 98, 25);
+            sequencer.addService(&Service_2, 1, 98, 50);
+            sequencer.addService(&Service_3, 1, 98, 100);
             break;
         case 1:
             sequencer.addService(&GPIO_Toggle, 1, 98, 100);
