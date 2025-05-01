@@ -177,6 +177,21 @@ void OLED_Check() {
     i2c_close(fd);
 }
 
+void Keypad_Test() {
+    initialize_keypad();
+    printf("Press any key (exit with '#'):\n");
+
+    while (1) {
+        char key = detect_key_press();
+        if (key) {
+            printf("Pressed: %c\n", key);
+            if (key == '#') break;
+        }
+    }
+
+    bcm2835_close();
+}
+
 // System macro definitions
 // Service 1
 #define ELEVATOR_DOOR_OPEN_TIME 60 // ticks: 1tick = 50ms => 3seconds (for S1)
@@ -544,6 +559,14 @@ int main(int argc, char* argv[]) {
             break;
         case 3:
             sequencer.addService(&GPIO_CHECKS, 1, 98, 100);
+            break;
+            break;
+        case 4:
+            sequencer.addService(&OLED_Check, 1, 98, 100);
+            break;
+            break;
+        case 5:
+            sequencer.addService(&Keypad_Test, 1, 98, 100);
             break;
         default:
             std::cerr << "Invalid flag value. Use -f <flag_value=1-6>" << std::endl;
