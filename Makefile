@@ -1,7 +1,7 @@
 LIB_DIRS = 
 CC = g++
 CFLAGS = -std=c++23 -Wall -Werror -pedantic -pthread
-LIBS = -lrt
+LIBS = -lrt -lbcm2835
 
 # Include both .hpp and .h files
 HFILES = $(wildcard *.hpp) $(wildcard *.h)
