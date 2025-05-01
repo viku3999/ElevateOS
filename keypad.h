@@ -30,4 +30,6 @@
   */
  char detect_key_press();
  
+ int get_key_press();
+
  #endif // KEYPAD_H

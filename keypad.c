@@ -13,6 +13,13 @@ const char keymap[ROWS][COLS] = {
     {'*', '0', '#'}
 };
 
+const int keymap_num[ROWS][COLS] = {
+    {1, 2, 3},
+    {4, 5, 6},
+    {7, 8, 9},
+    {10, 0, 11}
+};
+
 void initialize_keypad() {
     if (!bcm2835_init()) {
         printf("Failed to initialize bcm2835!\n");
@@ -50,4 +57,27 @@ char detect_key_press() {
         bcm2835_gpio_write(row_pins[row], HIGH);
     }
     return 0;
+}
+
+int get_key_press() {
+
+    int ret_val = -1;
+
+    for (int row = 0; row < ROWS; row++) {
+        bcm2835_gpio_write(row_pins[row], LOW);
+        bcm2835_delayMicroseconds(100);  // Settling time
+        
+        for (int col = 0; col < COLS; col++) {
+            if (bcm2835_gpio_lev(col_pins[col]) == LOW) {
+                // Wait for key release
+                while (bcm2835_gpio_lev(col_pins[col]) == LOW) {
+                    bcm2835_delayMicroseconds(100);
+                }
+                bcm2835_gpio_write(row_pins[row], HIGH);
+                ret_val = keymap_num[row][col];
+            }
+        }
+        bcm2835_gpio_write(row_pins[row], HIGH);
+    }
+    return ret_val;
 }

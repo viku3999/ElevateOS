@@ -55,6 +55,11 @@
 #define BUTTON_PIN_F3 10
 #define BUTTON_PIN_F4 22
 
+#define OLED_LINE_1 0
+#define OLED_LINE_2 16
+#define OLED_LINE_3 32
+#define OLED_LINE_4 48
+
 int _running = 1;  // Global variable to control service execution
 
 Sequencer sequencer{};
@@ -140,58 +145,90 @@ void GPIO_CHECKS(){
     std::cout << "BUTTON_PIN_F4 value: " << gpio_value << std::endl;
 }
 
-void OLED_Check() {
-    int fd = i2c_init();
-    if (fd < 0) {
-        fprintf(stderr, "Failed to initialize I2C\n");
+void OLED_Check(){
+    static int fd, init = 0;
+    if(!init){
+        fd = i2c_init();
+        if (fd < 0) {
+            fprintf(stderr, "Failed to initialize I2C\n");
+        }
+    
+        if (!SSD1106_init(fd)) {
+            fprintf(stderr, "Failed to initialize OLED\n");
+            i2c_close(fd);
+        }
+        init = 1;
     }
 
-    if (!SSD1106_init(fd)) {
-        fprintf(stderr, "Failed to initialize OLED\n");
-        i2c_close(fd);
+    while(true){
+
+        for(int i = 0; i < 100; i++) {
+            for(int j = 0; j < 55; j++) {
+                std::cout << i << " , "<< j << std::endl;
+                SSD1106_gotoXY(i, j);
+                SSD1106_puts(fd, ".", &Font_7x10, SSD1106_COLOR_WHITE);
+                SSD1106_update_screen(fd);
+                usleep(100);
+            }
+        }
     }
-
-    // Display test pattern
-    SSD1106_clear_screen(fd);
-    SSD1106_gotoXY(0, 0);
-    SSD1106_puts(fd, "RPi OLED Test", &Font_7x10, SSD1106_COLOR_WHITE);
-    
-    SSD1106_gotoXY(0, 16);
-    SSD1106_puts(fd, "7x10 Font Demo", &Font_7x10, SSD1106_COLOR_WHITE);
-    
-    SSD1106_gotoXY(0, 32);
-    SSD1106_puts(fd, "ABCDEFGHIJKLM", &Font_7x10, SSD1106_COLOR_WHITE);
-    
-    SSD1106_gotoXY(0, 48);
-    SSD1106_puts(fd, "NOPQRSTUVWXYZ", &Font_7x10, SSD1106_COLOR_WHITE);
-    
-    SSD1106_gotoXY(11, 48);
-    SSD1106_printDigit(fd, 3, &Font_7x10, SSD1106_COLOR_WHITE);
-
-    SSD1106_update_screen(fd);
-
-    sleep(5);
-    
-    // Clear display before exiting
-    SSD1106_clear_screen(fd);
-    i2c_close(fd);
 }
+
+// void OLED_Check() {
+//     int fd = i2c_init();
+//     if (fd < 0) {
+//         fprintf(stderr, "Failed to initialize I2C\n");
+//     }
+
+//     if (!SSD1106_init(fd)) {
+//         fprintf(stderr, "Failed to initialize OLED\n");
+//         i2c_close(fd);
+//     }
+
+//     // Display test pattern
+//     // SSD1106_clear_screen(fd);
+//     SSD1106_gotoXY(0, 0);
+//     SSD1106_puts(fd, "RPi OLED Test", &Font_7x10, SSD1106_COLOR_WHITE);
+    
+//     SSD1106_gotoXY(0, 16);
+//     SSD1106_puts(fd, "7x10 Font Demo", &Font_7x10, SSD1106_COLOR_WHITE);
+    
+//     SSD1106_gotoXY(0, 32);
+//     SSD1106_puts(fd, "ABCDEFGHIJKLM", &Font_7x10, SSD1106_COLOR_WHITE);
+    
+//     SSD1106_gotoXY(0, 48);
+//     SSD1106_puts(fd, "NOPQRSTUVWXYZ", &Font_7x10, SSD1106_COLOR_WHITE);
+    
+//     SSD1106_gotoXY(11, 48);
+//     SSD1106_printDigit(fd, 3, &Font_7x10, SSD1106_COLOR_WHITE);
+
+//     SSD1106_update_screen(fd);
+    
+//     // Clear display before exiting
+//     // SSD1106_clear_screen(fd);
+//     i2c_close(fd);
+// }
 
 void Keypad_Test() {
     initialize_keypad();
 
-    char key = detect_key_press();
-    if (key) {
-        printf("Pressed: %c\n", key);
-    }
+    // char key = detect_key_press();
+    int key_num = get_key_press();
+    // if (key) {
+    //     printf("Pressed: %c\n", key);
+    // }
 
+    if(key_num>-1){
+        std::cout << "Key number: " << key_num << std::endl;
+    }
+    
     bcm2835_close();
 }
 
 // System macro definitions
 // Service 1
-#define ELEVATOR_DOOR_OPEN_TIME 60 // ticks: 1tick = 50ms => 3seconds (for S1)
-#define ELEVATOR_DOOR_OBSTACLE_TIME 400 // ticks: 1tick = 50ms => 20seconds (for S1)
+#define ELEVATOR_DOOR_OPEN_TIME 120 // ticks: 1tick = 25ms => 3seconds (for S1)
+#define ELEVATOR_DOOR_OBSTACLE_TIME 800 // ticks: 1tick = 25ms => 20seconds (for S1)
 
 // Service 2
 #define ELEVATOR_MOVE_TIME 30 // ticks: 1tick = 100ms => 3seconds (for S2)
@@ -207,7 +244,7 @@ void Keypad_Test() {
 #define IR_DETECTED 0
 #define IR_NOT_DETECTED 1
 
-#define ELEVATOR_FLOOR_SELECTED 0
+#define ELEVATOR_FLOOR_SELECTION 0
 #define ELEVATOR_MOVE 1
 
 // Global shared variables
@@ -218,7 +255,50 @@ struct Elevator {
     int door_open_flag; // Flag to indicate if door should be opened
     int floor_status; //Flag to indicate status of floor selection
 };
-Elevator elevator = {0, 0, 0, 0, 0};
+Elevator elevator = {1, 1, ELEVATOR_DOOR_CLOSE, 0, ELEVATOR_FLOOR_SELECTION};
+
+int get_push_button_floor() {
+    int floor = 0;
+    int button_value = 0;
+    GPIO_Get_Value(BUTTON_PIN_F1, &button_value);
+    if (button_value == 1) {
+        floor = 1;
+    } 
+    else {
+        GPIO_Get_Value(BUTTON_PIN_F2, &button_value);
+        if (button_value == 1) {
+            floor = 2;
+        } 
+        else {
+            GPIO_Get_Value(BUTTON_PIN_F3, &button_value);
+            if (button_value == 1) {
+                floor = 3;
+            } 
+            else {
+                GPIO_Get_Value(BUTTON_PIN_F4, &button_value);
+                if (button_value == 1) {
+                    floor = 4;
+                }
+            }
+        }
+    }
+    return floor;
+}
+
+int get_keypad_button_floor(){
+    int init = 0;
+    if(!init){
+        initialize_keypad();
+        init = 1;
+    }
+
+    // int key_num = get_key_press();
+    // bcm2835_close();
+
+    return get_key_press();
+
+    // return -1;
+}
 
 /* Controls the elevator door
  * This service runs at 50ms intervals
@@ -241,62 +321,6 @@ void Service_1(){
 
     elevator_cpy = elevator; // Copy the shared elevator structure
 
-    /* 
-    if((elevator_cpy.door_status == ELEVATOR_DOOR_CLOSE) && (elevator_cpy.door_open_flag == 1)) {
-        // Open the door
-        syslog(LOG_CRIT, "Service 1: Door is opening\n");
-        elevator_cpy.door_status = ELEVATOR_DOOR_OPENING;
-        
-        elevator = elevator_cpy; // Update the shared elevator structure
-    }
-    else if ((elevator_cpy.door_status == ELEVATOR_DOOR_OPENING) && (elevator_cpy.door_open_flag == 1)) {
-        int temp = 0;
-        GPIO_Get_Value(IR_DOOR_PIN, &temp);
-        if(temp == 0){
-            // Door is opened
-            syslog(LOG_CRIT, "Service 1: Door is opened\n");
-            elevator_cpy.door_status = ELEVATOR_DOOR_OPEN;
-            elevator_cpy.door_open_flag = 0; // Reset the door open flag
-            tick_count = ELEVATOR_DOOR_OPEN_TIME; // Set the timer for door open time
-
-            elevator = elevator_cpy; // Update the shared elevator structure
-        }
-    }
-    else if(elevator_cpy.door_status == ELEVATOR_DOOR_OPEN) {
-        tick_count--;
-        if(tick_count <= 0) {
-            // Close the door
-            syslog(LOG_CRIT, "Service 1: Door is closing\n");
-            elevator_cpy.door_status = ELEVATOR_DOOR_CLOSING;
-
-            elevator = elevator_cpy; // Update the shared elevator structure
-        }
-        else{
-            // Check for obstacle
-            int obstacle_value = 0;
-            GPIO_Get_Value(IR_OBSTACLE_PIN, &obstacle_value);
-            if(obstacle_value == 1) {
-                // Obstacle detected
-                syslog(LOG_CRIT, "Service 1: Obstacle detected. Door will remain open\n");
-                tick_count = ELEVATOR_DOOR_OBSTACLE_TIME; // Set the timer for door open time
-
-                elevator = elevator_cpy; // Update the shared elevator structure
-            }
-        }
-    }
-    else if ((elevator_cpy.door_status == ELEVATOR_DOOR_CLOSING) && (tick_count <= 0)) {
-        int temp = 0;
-        GPIO_Get_Value(IR_DOOR_PIN, &temp);
-        if(temp == 1){
-            // Door is closed
-            syslog(LOG_CRIT, "Service 1: Door is closed\n");
-            elevator_cpy.door_status = ELEVATOR_DOOR_CLOSE;
-
-            elevator = elevator_cpy; // Update the shared elevator structure
-        }
-    } 
-    */
-
     switch (elevator_cpy.door_status) {
         case ELEVATOR_DOOR_CLOSE:
             if (elevator_cpy.door_open_flag == 1) {
@@ -311,7 +335,7 @@ void Service_1(){
             if (elevator_cpy.door_open_flag == 1) {
                 int temp = 0;
                 GPIO_Get_Value(IR_DOOR_PIN, &temp);
-                if (temp == IR_DETECTED) {
+                if (temp == IR_NOT_DETECTED) {
                     // Door is opened
                     syslog(LOG_CRIT, "Service 1: Door is opened\n");
                     elevator_cpy.door_status = ELEVATOR_DOOR_OPEN;
@@ -373,39 +397,6 @@ void Service_1(){
     }
 }
 
-int get_push_button_floor() {
-    int floor = 0;
-    int button_value = 0;
-    GPIO_Get_Value(BUTTON_PIN_F1, &button_value);
-    if (button_value == 1) {
-        floor = 1;
-    } 
-    else {
-        GPIO_Get_Value(BUTTON_PIN_F2, &button_value);
-        if (button_value == 1) {
-            floor = 2;
-        } 
-        else {
-            GPIO_Get_Value(BUTTON_PIN_F3, &button_value);
-            if (button_value == 1) {
-                floor = 3;
-            } 
-            else {
-                GPIO_Get_Value(BUTTON_PIN_F4, &button_value);
-                if (button_value == 1) {
-                    floor = 4;
-                }
-            }
-        }
-    }
-    return floor;
-}
-
-int get_keypad_button_floor(){
-
-    return -1;
-}
-
 /* 
  * Control the elevator movement
  * This service runs at 100ms intervals 
@@ -425,19 +416,27 @@ void Service_2(){
         init = 1;
     }
 // mutex lock
-    elevator_cpy2 = elevator; // Copy the shared elevator structure
+elevator_cpy2 = elevator; // Copy the shared elevator structure
 // mutex unlock 
 
+std::cout<<"\nHI\n";
+std::cout<<"Door status: "<<elevator_cpy2.door_status<<std::endl;
+std::cout<<"Current floor: "<<elevator_cpy2.curr_floor<<std::endl;
+std::cout<<"Destination floor: "<<elevator_cpy2.dest_floor<<std::endl;
+std::cout<<"Floor status: "<<elevator_cpy2.floor_status<<std::endl;
+std::cout<<"Door open flag: "<<elevator_cpy2.door_open_flag<<std::endl;
+std::cout<<"Tick count: "<<tick_count<<std::endl;
 // If the door is closed, floor can be selected
     if(elevator_cpy2.door_status == ELEVATOR_DOOR_CLOSE) {
         int elevator_button_detected;
         int push_button_detected;
         switch (elevator_cpy2.floor_status) {
-            case ELEVATOR_FLOOR_SELECTED:
+            case ELEVATOR_FLOOR_SELECTION:
                 //Detect if keypad button is pressed if the elevator is at the destination floor
                 elevator_button_detected = get_keypad_button_floor();
                 push_button_detected = get_push_button_floor();
-                if((elevator_button_detected) && (elevator_cpy2.curr_floor == elevator_cpy2.dest_floor)){
+
+                if((elevator_button_detected) && (elevator_cpy2.curr_floor == elevator_cpy2.dest_floor) && (elevator_button_detected != -1)){
                     elevator_cpy2.dest_floor = elevator_button_detected;
                 }
                 //Detect if push button is pressed if the elevator is at the destination floor
@@ -460,18 +459,22 @@ void Service_2(){
                 break;
 
             case ELEVATOR_MOVE:
-                if(--tick_count == 0){
+                tick_count -= 1;
+                if(tick_count <= 0){
                     // Determine direction of movement and do ++ or --
                     elevator_cpy2.curr_floor = (elevator_cpy2.curr_floor > elevator_cpy2.dest_floor) ? elevator_cpy2.curr_floor - 1 : elevator_cpy2.curr_floor + 1;
                     
+                    // reset the tick timer if the destination is not reached
                     if(elevator_cpy2.dest_floor != elevator_cpy2.curr_floor){
-                        tick_count = ELEVATOR_MOVE_TIME; // reset the tick timer if the destination is not reached
+                        tick_count = ELEVATOR_MOVE_TIME; 
+                    }
+                    // If the elevator reaches the destination floor, open the door
+                    else{
+                        elevator_cpy2.floor_status = ELEVATOR_FLOOR_SELECTION;
+                        elevator_cpy2.door_open_flag = 1; //Floor is reached so door can open
                     }
                 }
 
-                elevator_cpy2.floor_status = ELEVATOR_FLOOR_SELECTED;
-                elevator_cpy2.door_open_flag = 1; //Floor is reached so door can open
-                
                 //mutex lock
                 elevator = elevator_cpy2; // Update the shared elevator structure
                 //mutex_unlock
@@ -483,44 +486,62 @@ void Service_2(){
                 syslog(LOG_CRIT, "Service 2: Unexpected floor movement\n");
                 break;
         }
-}
-    // else {
-    //     syslog(LOG_INFO, "The door is open. Elevator cannot move\n");
-    //     break;
-    // }
+    }
 }
 
 // Control the OLED display and display the current floor, destination floor, and door status
 // This service runs at 150ms intervals
 void Service_3(){
-
     struct Elevator elevator_cpy3 = {0, 0, 0, 0, 0};
-    int fd = i2c_init();
-
+    static int fd, init = 0;
+    if(!init){
+        fd = i2c_init();
+        if (fd < 0) {
+            fprintf(stderr, "Failed to initialize I2C\n");
+        }
+        
+        if (!SSD1106_init(fd)) {
+            fprintf(stderr, "Failed to initialize OLED\n");
+            i2c_close(fd);
+        }
+        init = 1;
+    }
+    
     // mutex lock
     elevator_cpy3 = elevator; // Copy the shared elevator structure
     // mutex unlock 
 
-    SSD1106_gotoXY(11, 0);
+    SSD1106_gotoXY(2, OLED_LINE_1);
+
+    SSD1106_puts(fd, "Door is ", &Font_7x10, SSD1106_COLOR_WHITE);
 
     if(elevator_cpy3.door_status == ELEVATOR_DOOR_OPEN){
-        SSD1106_puts(fd, "Open", &Font_7x10, SSD1106_COLOR_WHITE);
+        SSD1106_puts(fd, "Open   ", &Font_7x10, SSD1106_COLOR_WHITE);
     }
-
+    else if (elevator_cpy3.door_status == ELEVATOR_DOOR_OPENING){
+        SSD1106_puts(fd, "Opening", &Font_7x10, SSD1106_COLOR_WHITE);
+    }
+    else if (elevator_cpy3.door_status == ELEVATOR_DOOR_CLOSING){
+        SSD1106_puts(fd, "Closing", &Font_7x10, SSD1106_COLOR_WHITE);
+    }
+    else if (elevator_cpy3.door_status == ELEVATOR_DOOR_CLOSE){
+        SSD1106_puts(fd, "Closed ", &Font_7x10, SSD1106_COLOR_WHITE);
+    }
     else{
-        SSD1106_puts(fd, "Closed", &Font_7x10, SSD1106_COLOR_WHITE);
+        SSD1106_puts(fd, "Unknown", &Font_7x10, SSD1106_COLOR_WHITE);
     }
 
     uint8_t digit = elevator_cpy3.curr_floor; //mutex lock?
-    SSD1106_gotoXY(11, 16);
+    SSD1106_gotoXY(2, OLED_LINE_2);
+    SSD1106_puts(fd, "Current Floor: ", &Font_7x10, SSD1106_COLOR_WHITE);
     SSD1106_printDigit(fd, digit, &Font_7x10, SSD1106_COLOR_WHITE);
 
     uint8_t digit1 = elevator_cpy3.dest_floor; //mutex lock?
+    SSD1106_gotoXY(2, OLED_LINE_3);
+    SSD1106_puts(fd, "Dest Floor: ", &Font_7x10, SSD1106_COLOR_WHITE);
     SSD1106_printDigit(fd, digit1, &Font_7x10, SSD1106_COLOR_WHITE);
-    
-    SSD1106_update_screen(fd);
 
-    sleep(5);
+    SSD1106_update_screen(fd);
 }
 
 int main(int argc, char* argv[]) {
@@ -558,7 +579,7 @@ int main(int argc, char* argv[]) {
             break;
             break;
         case 4:
-            sequencer.addService(&OLED_Check, 1, 98, 100);
+            sequencer.addService(&OLED_Check, 1, 98, 1000);
             break;
             break;
         case 5:
