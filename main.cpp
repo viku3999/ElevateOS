@@ -39,6 +39,11 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include <stdio.h>
+#include <unistd.h>
+#include "i2c.h"
+#include "oled.h"
+
 // Pin definitions
 #define IR_DOOR_PIN 17 
 #define IR_OBSTACLE_PIN 27
@@ -131,6 +136,45 @@ void GPIO_CHECKS(){
     std::cout << "BUTTON_PIN_F3 value: " << gpio_value << std::endl;
     GPIO_Get_Value(BUTTON_PIN_F4, &gpio_value);
     std::cout << "BUTTON_PIN_F4 value: " << gpio_value << std::endl;
+}
+
+void OLED_Check() {
+    int fd = i2c_init();
+    if (fd < 0) {
+        fprintf(stderr, "Failed to initialize I2C\n");
+        return 1;
+    }
+
+    if (!SSD1106_init(fd)) {
+        fprintf(stderr, "Failed to initialize OLED\n");
+        i2c_close(fd);
+        return 1;
+    }
+
+    // Display test pattern
+    SSD1106_clear_screen(fd);
+    SSD1106_gotoXY(0, 0);
+    SSD1106_puts(fd, "RPi OLED Test", &Font_7x10, SSD1106_COLOR_WHITE);
+    
+    SSD1106_gotoXY(0, 16);
+    SSD1106_puts(fd, "7x10 Font Demo", &Font_7x10, SSD1106_COLOR_WHITE);
+    
+    SSD1106_gotoXY(0, 32);
+    SSD1106_puts(fd, "ABCDEFGHIJKLM", &Font_7x10, SSD1106_COLOR_WHITE);
+    
+    SSD1106_gotoXY(0, 48);
+    SSD1106_puts(fd, "NOPQRSTUVWXYZ", &Font_7x10, SSD1106_COLOR_WHITE);
+    
+    SSD1106_gotoXY(11, 48);
+    SSD1106_printDigit(fd, 3, &Font_7x10, SSD1106_COLOR_WHITE);
+
+    SSD1106_update_screen(fd);
+
+    sleep(5);
+    
+    // Clear display before exiting
+    SSD1106_clear_screen(fd);
+    i2c_close(fd);
 }
 
 // System macro definitions
