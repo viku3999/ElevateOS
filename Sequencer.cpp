@@ -96,24 +96,37 @@ void Service::release(){
 void Service::_provideService() {
     _initializeService();
 
+    auto nextExpectedStartTime = std::chrono::steady_clock::now();
+
     while (_running) {
         if (_semaphore.try_acquire_for(std::chrono::milliseconds(100))) {
-            syslog(LOG_CRIT, "task launch thread id: %lu", syscall(SYS_gettid));
+            auto actualStartTime = std::chrono::steady_clock::now();
+            syslog(LOG_CRIT, "Task launch thread id: %lu", syscall(SYS_gettid));
+
+            // Check for deadline miss
+            if (actualStartTime > nextExpectedStartTime) {
+                auto deadlineMissDuration = std::chrono::duration_cast<std::chrono::microseconds>(actualStartTime - nextExpectedStartTime);
+                syslog(LOG_ERR, "Deadline miss detected! Thread ID: %lu, Missed by: %ld μs",
+                       syscall(SYS_gettid), deadlineMissDuration.count());
+                _deadline_miss += 1;
+            }
+
+            nextExpectedStartTime = actualStartTime + std::chrono::milliseconds(_period);
+
             auto startTime = std::chrono::steady_clock::now();
-            
             _lastStartTime = startTime;
-            
+
             // Run the actual service task
             _doService();
-            syslog(LOG_CRIT, "task completed thread id: %lu", syscall(SYS_gettid));
+            syslog(LOG_CRIT, "Task completed thread id: %lu", syscall(SYS_gettid));
 
             auto endTime = std::chrono::steady_clock::now();
             auto execTime = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime);
 
             // Update execution time statistics
-            if (execTime < _minExecTime) 
+            if (execTime < _minExecTime)
                 _minExecTime = execTime;
-            if (execTime > _maxExecTime) 
+            if (execTime > _maxExecTime)
                 _maxExecTime = execTime;
 
             _totalExecTime += execTime;
@@ -136,7 +149,8 @@ void Service::_logStatistics() {
         "Service stats -> Tid: %ld, affinity: %d, priority: %d, period: %d\n"
         "Executions: %lu\n"
         "Exec Time Min: %ld μs, Max: %ld μs, Avg: %ld μs\n"
-        "Jitter : %ld μs, \n",
+        "Jitter : %ld μs, \n"
+        "Deadline Miss: %d\n",
         syscall(SYS_gettid),
         _affinity,
         _priority,  
@@ -145,7 +159,8 @@ void Service::_logStatistics() {
         duration_cast<microseconds>(_minExecTime).count(),
         duration_cast<microseconds>(_maxExecTime).count(),
         duration_cast<microseconds>(avg).count(),
-        duration_cast<microseconds>(Jitter).count()
+        duration_cast<microseconds>(Jitter).count(),
+        _deadline_miss
     );
 }
 

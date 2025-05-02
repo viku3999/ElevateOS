@@ -32,7 +32,8 @@
         : _doService(std::forward<T>(doService)), 
             _affinity(affinity), 
             _priority(priority), 
-            _period(period), 
+            _period(period),
+            _deadline_miss(0),
             _semaphore(0), 
             _running(true),
             _minExecTime(std::chrono::nanoseconds::max()),
@@ -59,6 +60,7 @@
         uint8_t _affinity;
         uint8_t _priority;  
         uint32_t _period;
+        uint32_t _deadline_miss;
         std::binary_semaphore _semaphore;
         std::atomic<bool> _running;
         std::jthread _service;
