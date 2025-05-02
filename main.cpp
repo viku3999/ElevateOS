@@ -1,13 +1,13 @@
 // Change from rpi
 #include <iostream>
-
-#include "Sequencer.hpp"
-#include "GPIO.hpp"
-
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
+
 #include <semaphore.h>
-#include <cstdint>
 #include <functional>
 #include <thread>
 #include <vector>
@@ -15,35 +15,24 @@
 
 #include <signal.h>
 #include <unistd.h>
-#include <cstring>
 #include <chrono>
  
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
-#include <sys/ioctl.h>
-#include <sys/mman.h>
 
-#include "Sequencer.hpp"
-#include <atomic>
 #include <syslog.h>
 
 #include <fstream>
-#include <linux/gpio.h>
- 
-#include <unistd.h>
-#include <fcntl.h>
-#include <string.h>
-#include <errno.h>
-#include <sys/ioctl.h>
-#include <stdint.h>
-#include <stdlib.h>
 
-#include <stdio.h>
-#include <unistd.h>
+#include <linux/gpio.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+
 #include "i2c.h"
 #include "oled.h"
-
+#include "Sequencer.hpp"
+#include "GPIO.hpp"
 #include "keypad.h"
 
 // Pin definitions
@@ -55,16 +44,48 @@
 #define BUTTON_PIN_F3 10
 #define BUTTON_PIN_F4 22
 
+// System macro definitions
+// Service 1
+#define ELEVATOR_DOOR_OPEN_TIME 120 // ticks: 1tick = 25ms => 3seconds (for S1)
+#define ELEVATOR_DOOR_OBSTACLE_TIME 800 // ticks: 1tick = 25ms => 20seconds (for S1)
+
+// Service 2
+#define ELEVATOR_MOVE_TIME 30 // ticks: 1tick = 100ms => 3seconds (for S2)
+
+// Service 3
 #define OLED_LINE_1 0
 #define OLED_LINE_2 16
 #define OLED_LINE_3 32
 #define OLED_LINE_4 48
+
+// System state definitions
+#define ELEVATOR_DOOR_CLOSE 0
+#define ELEVATOR_DOOR_OPEN 1
+#define ELEVATOR_DOOR_CLOSING 2
+#define ELEVATOR_DOOR_OPENING 3
+
+#define IR_DETECTED 0
+#define IR_NOT_DETECTED 1
+
+#define ELEVATOR_FLOOR_SELECTION 0
+#define ELEVATOR_MOVE 1
+
+// Global shared variables
+struct Elevator {
+    int curr_floor; // Current floor
+    int dest_floor; // Destination floor
+    int door_status; // Door open/close status
+    int door_open_flag; // Flag to indicate if door should be opened
+    int floor_status; //Flag to indicate status of floor selection
+};
+Elevator elevator = {1, 1, ELEVATOR_DOOR_CLOSE, 0, ELEVATOR_FLOOR_SELECTION};
 
 int _running = 1;  // Global variable to control service execution
 
 Sequencer sequencer{};
 static int exit_flag = 0;
 
+// Signal handler for Ctrl+C
 void handle_sigint(int sig) {
     printf("\nCaught signal %d (Ctrl+C). Exiting...\n", sig);
     syslog(LOG_CRIT, "Caught signal %d (Ctrl+C). Exiting...\n", sig);
@@ -72,6 +93,7 @@ void handle_sigint(int sig) {
     exit_flag = 1; // Set exit flag to indicate termination
 }
 
+// Function to check GPIO values for all connected push buttons and IR sensors
 void GPIO_Check(){
     static int init = 0;
     std::cout << "\n\tGPIO_CHECKS" << std::endl;
@@ -103,6 +125,7 @@ void GPIO_Check(){
     std::cout << "BUTTON_PIN_F4 value: " << gpio_value << std::endl;
 }
 
+// Function to check OLED display
 void OLED_Check() {
     int fd = i2c_init();
     if (fd < 0) {
@@ -138,6 +161,7 @@ void OLED_Check() {
     i2c_close(fd);
 }
 
+// Function to check keypad input
 void Keypad_Check() {
     initialize_keypad();
 
@@ -150,38 +174,7 @@ void Keypad_Check() {
     bcm2835_close();
 }
 
-// System macro definitions
-// Service 1
-#define ELEVATOR_DOOR_OPEN_TIME 120 // ticks: 1tick = 25ms => 3seconds (for S1)
-#define ELEVATOR_DOOR_OBSTACLE_TIME 800 // ticks: 1tick = 25ms => 20seconds (for S1)
-
-// Service 2
-#define ELEVATOR_MOVE_TIME 30 // ticks: 1tick = 100ms => 3seconds (for S2)
-
-// Service 3
-
-// Local macro definitions
-#define ELEVATOR_DOOR_CLOSE 0
-#define ELEVATOR_DOOR_OPEN 1
-#define ELEVATOR_DOOR_CLOSING 2
-#define ELEVATOR_DOOR_OPENING 3
-
-#define IR_DETECTED 0
-#define IR_NOT_DETECTED 1
-
-#define ELEVATOR_FLOOR_SELECTION 0
-#define ELEVATOR_MOVE 1
-
-// Global shared variables
-struct Elevator {
-    int curr_floor; // Current floor
-    int dest_floor; // Destination floor
-    int door_status; // Door open/close status
-    int door_open_flag; // Flag to indicate if door should be opened
-    int floor_status; //Flag to indicate status of floor selection
-};
-Elevator elevator = {1, 1, ELEVATOR_DOOR_CLOSE, 0, ELEVATOR_FLOOR_SELECTION};
-
+// Function to get the floor number from the push buttons
 int get_push_button_floor() {
     int floor = 0;
     int button_value = 0;
@@ -210,6 +203,7 @@ int get_push_button_floor() {
     return floor;
 }
 
+// Function to get the floor number from the keypad
 int get_keypad_button_floor(){
     int init = 0;
     if(!init){
@@ -311,10 +305,8 @@ void Service_1(){
     }
 }
 
-/* 
- * Control the elevator movement
+/* Control the elevator movement
  * This service runs at 100ms intervals 
- * 
  */
 void Service_2(){
     static int init = 0;
@@ -329,11 +321,11 @@ void Service_2(){
         //keypad init
         init = 1;
     }
-// mutex lock
-elevator_cpy2 = elevator; // Copy the shared elevator structure
-// mutex unlock 
+    // mutex lock
+    elevator_cpy2 = elevator; // Copy the shared elevator structure
+    // mutex unlock 
 
-// If the door is closed, floor can be selected
+    // If the door is closed, floor can be selected
     if(elevator_cpy2.door_status == ELEVATOR_DOOR_CLOSE) {
         int elevator_button_detected;
         int push_button_detected;
@@ -396,8 +388,9 @@ elevator_cpy2 = elevator; // Copy the shared elevator structure
     }
 }
 
-// Control the OLED display and display the current floor, destination floor, and door status
-// This service runs at 150ms intervals
+/* Control the OLED display and display the current floor, destination floor, and door status
+ * This service runs at 150ms intervals
+ */
 void Service_3(){
     struct Elevator elevator_cpy3 = {0, 0, 0, 0, 0};
     static int fd, init = 0;
@@ -451,6 +444,7 @@ void Service_3(){
     SSD1106_update_screen(fd);
 }
 
+// Main function
 int main(int argc, char* argv[]) {
     syslog(LOG_CRIT, "RTES Course Project\nDone by: Sriya Garde, and Vishnu Kumar\n");
 
