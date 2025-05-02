@@ -47,34 +47,11 @@
  
 #define DEV_NAME "/dev/gpiochip0"
 
-
-
 // int _running = 1;  // Global variable to control service execution
-
-// std::jthread _service;  // Global thread for service execution
-
-//Sequencer sequencer{};
-// int exit_flag = 0;
-
-// Fib sequence definitions
-
-#define FIB_LIMIT_FOR_32_BIT 47
-#define NSEC_PER_SEC (1000000000)
-#define NSEC_PER_MSEC (1000000)
-#define NSEC_PER_MICROSEC (1000)
-#define FIB10_ITERATIONS 1500000
-#define FIB20_ITERATIONS 3000000
-
-unsigned int seqIterations = FIB_LIMIT_FOR_32_BIT;
-unsigned int idx = 0, jdx = 1;
-unsigned int fib = 0, fib0 = 0, fib1 = 1;
-// unsigned int fib10Cnt = 0, fib20Cnt = 0;
 
 // Service method definitions:
 void Service::_initializeService(){
 
-    // todo: set affinity, priority, sched policy
-    // (heads up: the thread is already running and we're in its context right now)
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
     CPU_SET(_affinity, &cpuset);
@@ -108,14 +85,11 @@ void Service::join() {
 }
 
 void Service::stop(){
-    // todo: change state to "not running" using an atomic variable
-    // (heads up: what if the service is waiting on the semaphore when this happens?)
     _running = false;  // Mark the service as stopped
+    _logStatistics();
 }
 
 void Service::release(){
-
-    // todo: release the service using the semaphore
     _semaphore.release();  // Allow service to run
 }
 
@@ -146,8 +120,6 @@ void Service::_provideService() {
             _executionCount++;
         }
     }
-
-    _logStatistics();
 }
 
 void Service::_logStatistics() {
@@ -161,11 +133,14 @@ void Service::_logStatistics() {
     // auto minJitter = _minExecTime - expected;
 
     syslog(LOG_CRIT,
-        "Service stats -> Tid: %ld\n"
+        "Service stats -> Tid: %ld, affinity: %d, priority: %d, period: %d\n"
         "Executions: %lu\n"
         "Exec Time Min: %ld μs, Max: %ld μs, Avg: %ld μs\n"
         "Jitter : %ld μs, \n",
         syscall(SYS_gettid),
+        _affinity,
+        _priority,  
+        _period,
         _executionCount,
         duration_cast<microseconds>(_minExecTime).count(),
         duration_cast<microseconds>(_maxExecTime).count(),
@@ -198,7 +173,6 @@ void Sequencer::timer_irq_service(union sigval sv){
 
 void Sequencer::startServices(){
     _running = 1;  // Set the running flag to true
-    // todo: start timer(s), release services
 
     // Set up the timer to call the timer_irq_service function
     struct sigevent sev{};
@@ -228,16 +202,16 @@ void Sequencer::startServices(){
 
 void Sequencer::stopServices(){
     _running = 0;  // Set the running flag to false
-    // todo: stop timer(s), stop services
+
     for (auto& service : _services) {
         service->stop();  // Stop the service
     }
-
+    
+    std::cout<<"Services stopped, Joining\n";
+    syslog(LOG_CRIT, "Services stopped, Joining\n");
+    
     for (auto& service : _services) {
         service->join();  // Stop the service
     }
-
-    std::cout<<"Services stopped\n";
-    syslog(LOG_CRIT, "Services stopped\n");
 }
 

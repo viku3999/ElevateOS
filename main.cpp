@@ -83,14 +83,14 @@ Elevator elevator = {1, 1, ELEVATOR_DOOR_CLOSE, 0, ELEVATOR_FLOOR_SELECTION};
 int _running = 1;  // Global variable to control service execution
 
 Sequencer sequencer{};
-static int exit_flag = 0;
+// static int exit_flag = 0;
 
 // Signal handler for Ctrl+C
 void handle_sigint(int sig) {
     printf("\nCaught signal %d (Ctrl+C). Exiting...\n", sig);
     syslog(LOG_CRIT, "Caught signal %d (Ctrl+C). Exiting...\n", sig);
     sequencer.stopServices();
-    exit_flag = 1; // Set exit flag to indicate termination
+    // exit_flag = 1; // Set exit flag to indicate termination
 }
 
 // Function to check GPIO values for all connected push buttons and IR sensors
@@ -449,6 +449,7 @@ void Service_3(){
 
 // Main function
 int main(int argc, char* argv[]) {
+    syslog(LOG_CRIT, "<Start_TAG>\n");
     syslog(LOG_CRIT, "RTES Course Project\nDone by: Sriya Garde, and Vishnu Kumar\n");
 
     if (argc < 2) {
