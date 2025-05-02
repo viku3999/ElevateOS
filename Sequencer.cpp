@@ -126,11 +126,12 @@ void Service::_provideService() {
         if (_semaphore.try_acquire_for(std::chrono::milliseconds(100))) {
             syslog(LOG_CRIT, "task launch thread id: %lu", syscall(SYS_gettid));
             auto startTime = std::chrono::steady_clock::now();
-
+            
             _lastStartTime = startTime;
-
+            
             // Run the actual service task
             _doService();
+            syslog(LOG_CRIT, "task completed thread id: %lu", syscall(SYS_gettid));
 
             auto endTime = std::chrono::steady_clock::now();
             auto execTime = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime);

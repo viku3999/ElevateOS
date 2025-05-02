@@ -164,7 +164,7 @@ void OLED_Check(){
 
         for(int i = 0; i < 100; i++) {
             for(int j = 0; j < 55; j++) {
-                std::cout << i << " , "<< j << std::endl;
+                // std::cout << i << " , "<< j << std::endl;
                 SSD1106_gotoXY(i, j);
                 SSD1106_puts(fd, ".", &Font_7x10, SSD1106_COLOR_WHITE);
                 SSD1106_update_screen(fd);
@@ -419,13 +419,13 @@ void Service_2(){
 elevator_cpy2 = elevator; // Copy the shared elevator structure
 // mutex unlock 
 
-std::cout<<"\nHI\n";
-std::cout<<"Door status: "<<elevator_cpy2.door_status<<std::endl;
-std::cout<<"Current floor: "<<elevator_cpy2.curr_floor<<std::endl;
-std::cout<<"Destination floor: "<<elevator_cpy2.dest_floor<<std::endl;
-std::cout<<"Floor status: "<<elevator_cpy2.floor_status<<std::endl;
-std::cout<<"Door open flag: "<<elevator_cpy2.door_open_flag<<std::endl;
-std::cout<<"Tick count: "<<tick_count<<std::endl;
+// std::cout<<"\nHI\n";
+// std::cout<<"Door status: "<<elevator_cpy2.door_status<<std::endl;
+// std::cout<<"Current floor: "<<elevator_cpy2.curr_floor<<std::endl;
+// std::cout<<"Destination floor: "<<elevator_cpy2.dest_floor<<std::endl;
+// std::cout<<"Floor status: "<<elevator_cpy2.floor_status<<std::endl;
+// std::cout<<"Door open flag: "<<elevator_cpy2.door_open_flag<<std::endl;
+// std::cout<<"Tick count: "<<tick_count<<std::endl;
 // If the door is closed, floor can be selected
     if(elevator_cpy2.door_status == ELEVATOR_DOOR_CLOSE) {
         int elevator_button_detected;
@@ -564,9 +564,9 @@ int main(int argc, char* argv[]) {
     // Add services based on the flag value
     switch(flag_value) {
         case 0: // Elevator services
-            sequencer.addService(&Service_1, 1, 98, 25);
+            sequencer.addService(&Service_1, 1, 99, 25);
             sequencer.addService(&Service_2, 1, 98, 50);
-            sequencer.addService(&Service_3, 1, 98, 100);
+            sequencer.addService(&Service_3, 2, 99, 100);
             break;
         case 1:
             sequencer.addService(&GPIO_Toggle, 1, 98, 100);
