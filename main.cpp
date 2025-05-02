@@ -336,6 +336,9 @@ void Service_2(){
                 push_button_detected = get_push_button_floor();
 
                 if((elevator_button_detected) && (elevator_cpy2.curr_floor == elevator_cpy2.dest_floor) && (elevator_button_detected != -1)){
+                    if((elevator_button_detected > 4) || (elevator_button_detected < 0)){
+                        break;
+                    }
                     elevator_cpy2.dest_floor = elevator_button_detected;
                 }
                 //Detect if push button is pressed if the elevator is at the destination floor

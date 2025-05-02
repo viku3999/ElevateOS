@@ -53,7 +53,7 @@
 
 // std::jthread _service;  // Global thread for service execution
 
-// Sequencer sequencer{};
+//Sequencer sequencer{};
 // int exit_flag = 0;
 
 // Fib sequence definitions
