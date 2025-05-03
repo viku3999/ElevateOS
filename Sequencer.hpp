@@ -24,8 +24,7 @@
  // The service class contains the service function and service parameters
  // (priority, affinity, etc). It spawns a thread to run the service, configures
  // the thread as required, and executes the service whenever it gets released.
- class Service
- {
+ class Service {
     public:
         template<typename T>
         Service(T&& doService, uint8_t affinity, uint8_t priority, uint32_t period) 
@@ -33,9 +32,10 @@
             _affinity(affinity), 
             _priority(priority), 
             _period(period),
-            _deadline_miss(0),
+            _deadline_miss_count(0),
             _semaphore(0), 
             _running(true),
+            _isRunning(false),
             _minExecTime(std::chrono::nanoseconds::max()),
             _maxExecTime(std::chrono::nanoseconds::zero()),
             _totalExecTime(std::chrono::nanoseconds::zero()),
@@ -54,16 +54,33 @@
 
         int get_period() { return _period; } // Added getter for period
         void join();
+        
+        bool isRunning() const {
+            return _isRunning.load();
+        }
+    
+        void setRunning(bool running) {
+            _isRunning.store(running);
+        }
+
+        void add_deadline_miss() {
+            _deadline_miss_count++;
+        }
+        int get_deadline_miss_count() const {
+            return _deadline_miss_count;
+        }
 
     private:
         std::function<void(void)> _doService;
         uint8_t _affinity;
         uint8_t _priority;  
         uint32_t _period;
-        uint32_t _deadline_miss;
+        uint32_t _deadline_miss_count;
         std::binary_semaphore _semaphore;
         std::atomic<bool> _running;
+        std::atomic<bool> _isRunning;
         std::jthread _service;
+
 
         std::chrono::nanoseconds _minExecTime;
         std::chrono::nanoseconds _maxExecTime;
@@ -82,36 +99,35 @@
  // The sequencer class contains the services set and manages
  // starting/stopping the services. While the services are running,
  // the sequencer releases each service at the requisite timepoint.
- class Sequencer
- {
- public:
-    template<typename... Args>
-    void addService(Args &&... args)
-    {
-        _services.emplace_back(std::make_unique<Service>(std::forward<Args>(args)...));
-    }
+ class Sequencer{
+    public:
+        template<typename... Args>
+        void addService(Args &&... args)
+        {
+            _services.emplace_back(std::make_unique<Service>(std::forward<Args>(args)...));
+        }
 
-    void startServices();
-    void stopServices();
+        void startServices();
+        void stopServices();
 
-    const std::vector<std::unique_ptr<Service>>& getServices() const {
-        return _services;
-    }
+        const std::vector<std::unique_ptr<Service>>& getServices() const {
+            return _services;
+        }
+        
+        int get_running() const {
+            return _running;
+        }
+        
+    private:
+        std::vector<std::unique_ptr<Service>> _services;
+        std::atomic<bool> _seq_running{false};
+        std::jthread timer_thread;
+        timer_t posix_timer;
+
+        int _running = 1;  // Global variable to control service execution
+        int exit_flag = 0;  // Global variable to control service execution
     
-    int get_running() const {
-        return _running;
-    }
-    
- private:
-    std::vector<std::unique_ptr<Service>> _services;
-    std::atomic<bool> _seq_running{false};
-    std::jthread timer_thread;
-    timer_t posix_timer;
-
-    int _running = 1;  // Global variable to control service execution
-    int exit_flag = 0;  // Global variable to control service execution
- 
-    static void timer_irq_service(union sigval sv);
-    void timer_service();
- };
+        static void timer_irq_service(union sigval sv);
+        void timer_service();
+};
  

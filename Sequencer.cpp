@@ -96,33 +96,29 @@ void Service::release(){
 void Service::_provideService() {
     _initializeService();
 
-    auto nextExpectedStartTime = std::chrono::steady_clock::now();
-
     while (_running) {
         if (_semaphore.try_acquire_for(std::chrono::milliseconds(100))) {
-            auto actualStartTime = std::chrono::steady_clock::now();
-            syslog(LOG_CRIT, "Task launch thread id: %lu", syscall(SYS_gettid));
-
-            // Check for deadline miss
-            if (actualStartTime > nextExpectedStartTime) {
-                auto deadlineMissDuration = std::chrono::duration_cast<std::chrono::microseconds>(actualStartTime - nextExpectedStartTime);
-                syslog(LOG_ERR, "Deadline miss detected! Thread ID: %lu, Missed by: %ld μs",
-                       syscall(SYS_gettid), deadlineMissDuration.count());
-                _deadline_miss += 1;
-            }
-
-            nextExpectedStartTime = actualStartTime + std::chrono::milliseconds(_period);
-
-            auto startTime = std::chrono::steady_clock::now();
-            _lastStartTime = startTime;
-
+            
             // Run the actual service task
+            auto startTime = std::chrono::steady_clock::now();
+            
+            syslog(LOG_CRIT, "Task launch thread id: %lu", syscall(SYS_gettid));
+            
+            setRunning(true);  // Set the service as running
+            
             _doService();
-            syslog(LOG_CRIT, "Task completed thread id: %lu", syscall(SYS_gettid));
+            
+            setRunning(false);  // Set the service as running
 
+            
             auto endTime = std::chrono::steady_clock::now();
-            auto execTime = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime);
 
+            auto execTime = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime);
+            syslog(LOG_CRIT, "Task completed thread id: %lu -> execution time: %ld μS", syscall(SYS_gettid), execTime.count()/1000);
+            
+            _lastStartTime = startTime;
+            
+            
             // Update execution time statistics
             if (execTime < _minExecTime)
                 _minExecTime = execTime;
@@ -143,14 +139,13 @@ void Service::_logStatistics() {
 
     // Calculate jitter
     auto Jitter = _maxExecTime - _minExecTime;
-    // auto minJitter = _minExecTime - expected;
 
     syslog(LOG_CRIT,
         "Service stats -> Tid: %ld, affinity: %d, priority: %d, period: %d\n"
         "Executions: %lu\n"
         "Exec Time Min: %ld μs, Max: %ld μs, Avg: %ld μs\n"
         "Jitter : %ld μs, \n"
-        "Deadline Miss: %d\n",
+        "Deadline Misses: %d\n",
         syscall(SYS_gettid),
         _affinity,
         _priority,  
@@ -160,7 +155,7 @@ void Service::_logStatistics() {
         duration_cast<microseconds>(_maxExecTime).count(),
         duration_cast<microseconds>(avg).count(),
         duration_cast<microseconds>(Jitter).count(),
-        _deadline_miss
+        _deadline_miss_count
     );
 }
 
@@ -181,7 +176,12 @@ void Sequencer::timer_irq_service(union sigval sv){
         int val = count % service->get_period();
 
         if (val == 0) {
-            service->release();  // Trigger service execution immediately (you can add periodic logic here)
+            if(service->isRunning()){
+                syslog(LOG_ERR, "Deadline miss detected! Service with period %d ms is still running.", service->get_period());
+                service->add_deadline_miss();
+            } else {
+                service->release();  // Start the service if not already running
+            }
         }
     }
 }
@@ -225,8 +225,8 @@ void Sequencer::stopServices(){
     std::cout<<"Services stopped, Joining\n";
     syslog(LOG_CRIT, "Services stopped, Joining\n");
     
-    for (auto& service : _services) {
-        service->join();  // Stop the service
-    }
+    // for (auto& service : _services) {
+    //     service->join();  // Stop the service
+    // }
 }
 

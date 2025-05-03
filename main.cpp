@@ -391,24 +391,30 @@ void Service_2(){
     }
 }
 
+int fd;
+
+void LCD_Init(){
+    syslog(LOG_CRIT, "LCD init - init start\n");
+    fd = i2c_init();
+    if (fd < 0) {
+        fprintf(stderr, "Failed to initialize I2C\n");
+    }
+
+    syslog(LOG_CRIT, "LCD init - I2C initialized\n");
+    
+    if (!SSD1106_init(fd)) {
+        fprintf(stderr, "Failed to initialize OLED\n");
+        i2c_close(fd);
+    }
+    syslog(LOG_CRIT, "LCD init - Disp initialized\n");
+}
+
 /* Control the OLED display and display the current floor, destination floor, and door status
  * This service runs at 150ms intervals
  */
 void Service_3(){
     struct Elevator elevator_cpy3 = {0, 0, 0, 0, 0};
-    static int fd, init = 0;
-    if(!init){
-        fd = i2c_init();
-        if (fd < 0) {
-            fprintf(stderr, "Failed to initialize I2C\n");
-        }
-        
-        if (!SSD1106_init(fd)) {
-            fprintf(stderr, "Failed to initialize OLED\n");
-            i2c_close(fd);
-        }
-        init = 1;
-    }
+    // static int fd, init = 0;
     
     // mutex lock
     elevator_cpy3 = elevator; // Copy the shared elevator structure
@@ -473,9 +479,10 @@ int main(int argc, char* argv[]) {
     // Add services based on the flag value
     switch(flag_value) {
         case 1: // Elevator services
+            LCD_Init();
             sequencer.addService(&Service_1, 1, 99, 25);
             sequencer.addService(&Service_2, 1, 98, 50);
-            sequencer.addService(&Service_3, 2, 99, 100);
+            sequencer.addService(&Service_3, 2, 99, 200);
             break;
         case 2:
             sequencer.addService(&GPIO_Check, 1, 99, 100);
